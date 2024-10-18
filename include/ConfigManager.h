@@ -38,6 +38,7 @@ public:
     bool delete_namespace(const char* namespace_name);
     bool delete_all_namespaces();
     bool read_key_value(const char* namespace_name, const char* key, KeyValuePair* kv);
+    int getAllNamespaces(char namespaces[][16], size_t max_namespaces);
 
 private:
     void read_value(nvs_handle_t handle, KeyValuePair& kv);

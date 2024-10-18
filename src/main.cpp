@@ -118,6 +118,23 @@ void setup() {
         }
     }
 
+    char namespaces[10][16];  // Platz für bis zu 10 Namespaces mit maximal 15 Zeichen pro Namespace
+
+    // Abrufen aller Namespaces
+    int namespace_count = configManager.getAllNamespaces(namespaces, 10);
+
+    // Schleife durch alle gefundenen Namespaces und Ausgabe per Serial.printf
+    for (int i = 0; i < namespace_count; ++i) {
+        Serial.printf("Namespace found: %s\n", namespaces[i]);
+    }
+
+    // Falls keine Namespaces gefunden wurden
+    if (namespace_count == 0) {
+        Serial.println("No namespaces found.");
+    }
+
+
+
     // Beispiel zum Löschen eines Namespaces
     configManager.delete_namespace("example_ns");
     configManager.delete_namespace("example_ns_two");

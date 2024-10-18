@@ -137,3 +137,32 @@ void ConfigManager::read_value(nvs_handle_t handle, KeyValuePair& kv) {
         Serial.println(err);  // Protokolliert den Fehlercode
     }
 }
+
+int ConfigManager::getAllNamespaces(char namespaces[][16], size_t max_namespaces) {
+    size_t namespace_count = 0;  // Anzahl der gefundenen Namespaces
+
+    nvs_iterator_t it = nvs_entry_find(NVS_DEFAULT_PART_NAME, nullptr, NVS_TYPE_ANY);
+    while (it != nullptr && namespace_count < max_namespaces) {
+        nvs_entry_info_t info;
+        nvs_entry_info(it, &info);
+
+        // Überprüfen, ob der Namespace bereits in der Liste ist
+        bool found = false;
+        for (size_t i = 0; i < namespace_count; ++i) {
+            if (strncmp(namespaces[i], info.namespace_name, 16) == 0) {
+                found = true;
+                break;
+            }
+        }
+
+        // Wenn der Namespace noch nicht in der Liste ist, hinzufügen
+        if (!found) {
+            strncpy(namespaces[namespace_count], info.namespace_name, 16);
+            namespace_count++;
+        }
+
+        it = nvs_entry_next(it);
+    }
+
+    return namespace_count;  // Rückgabe der Anzahl der gefundenen Namespaces
+}
