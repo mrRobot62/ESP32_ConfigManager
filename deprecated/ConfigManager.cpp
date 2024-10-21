@@ -1,5 +1,9 @@
 #include "ConfigManager.h"
 
+// Espressif: Doku zu Non-Votile-Storage Library
+// https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/storage/nvs_flash.html#api-reference 
+
+
 // Konstruktor: Initialisiert NVS
 ConfigManager::ConfigManager() {
     nvs_init();
@@ -20,18 +24,19 @@ bool ConfigManager::read_namespace(const char* namespace_name, KeyValuePair* kv_
     nvs_handle_t nvs_handle;
     esp_err_t err = nvs_open(namespace_name, NVS_READONLY, &nvs_handle);
     if (err != ESP_OK) {
-        Serial.println("Error opening NVS handle!");
+        Serial.printf("Error opening NVS handle! ('%s')\n", namespace_name);
         return false;
     }
-
+    Serial.println(">> ConfigManager::read_namespace");
     nvs_iterator_t it = nvs_entry_find(NVS_DEFAULT_PART_NAME, namespace_name, NVS_TYPE_ANY);
     size_t i = 0;
     while (it != nullptr && i < *count) {
         nvs_entry_info_t info;
         nvs_entry_info(it, &info);
 
-        strncpy(kv_array[i].key, info.key, sizeof(kv_array[i].key));
-        strncpy(kv_array[i].nspace, namespace_name, sizeof(kv_array[i].nspace));
+        kv_array[i].key = info.key;
+        kv_array[i].nspace =  namespace_name;
+        Serial.printf(">>> %d - ConfigManager::read_namespace Key: '%s' \n", i, kv_array[i].key);
         
         read_value(nvs_handle, kv_array[i]);  // Hilfsfunktion, um den Wert auszulesen
 
@@ -48,7 +53,7 @@ bool ConfigManager::write(const char* namespace_name, const char* key, Value val
     nvs_handle_t nvs_handle;
     esp_err_t err = nvs_open(namespace_name, NVS_READWRITE, &nvs_handle);
     if (err != ESP_OK) {
-        Serial.println("Error opening NVS handle!");
+        Serial.printf("Error opening NVS handle! ('%s')\n", namespace_name);
         return false;
     }
 
@@ -56,18 +61,20 @@ bool ConfigManager::write(const char* namespace_name, const char* key, Value val
     if (!overwrite) {
         KeyValuePair kv;
         if (read_key_value(namespace_name, key, &kv)) {
-            Serial.println("Key already exists, skipping write.");
+            Serial.printf("Key '%s' proteced key, skipping write.\n", key);
             nvs_close(nvs_handle);
             return false;  // Schlüssel existiert, nicht überschreiben
         }
-        Serial.println("not protected")  ;  
     }
     if (type == TYPE_INT) {
         err = nvs_set_i32(nvs_handle, key, value.i_val);
     } else if (type == TYPE_DOUBLE) {
         err = nvs_set_blob(nvs_handle, key, &value.d_val, sizeof(double));
     } else if (type == TYPE_STRING) {
-        err = nvs_set_str(nvs_handle, key, value.s_val);
+        err = nvs_set_str(nvs_handle, key, value.s_val.c_str());
+    } else if (type == TYPE_BLOB) {  // Neuer Fall für BLOB-Daten
+        // ein BLOB ist Array aus 16Bit Werten
+        err = nvs_set_blob(nvs_handle, key, value.s_val.c_str(), sizeof(uint16_t) * 16);  
     }
 
     if (err != ESP_OK) {
@@ -80,7 +87,8 @@ bool ConfigManager::write(const char* namespace_name, const char* key, Value val
     if (err != ESP_OK) {
         Serial.println("Commit failed!");
     } else {
-        Serial.println("Value successfully written and committed.");
+        Serial.print("Value successfully written and committed into Key: ");
+        Serial.println(key);
     }
     nvs_close(nvs_handle);
     return err == ESP_OK;
@@ -103,12 +111,17 @@ bool ConfigManager::read_key_value(const char* namespace_name, const char* key, 
     nvs_handle_t nvs_handle;
     esp_err_t err = nvs_open(namespace_name, NVS_READONLY, &nvs_handle);
     if (err != ESP_OK) {
-        Serial.println("Error opening NVS handle!");
+        Serial.printf("Error opening NVS handle! ('%s')\n", namespace_name);
         return false;
     }
+    
+    // in KeyValuePair soll das Ergebnis gespeichert werden, vorab muss aber der zu suchende Key
+    // hinterlegt werden.
+    kv->key = key;
+    kv->nspace = namespace_name;
 
-    strncpy(kv->key, key, sizeof(kv->key));
-    strncpy(kv->nspace, namespace_name, sizeof(kv->nspace));
+    //strncpy(kv->key, key, sizeof(kv->key));
+    //strncpy(kv->nspace, namespace_name, sizeof(kv->nspace));
 
     read_value(nvs_handle, *kv);
 
@@ -117,24 +130,28 @@ bool ConfigManager::read_key_value(const char* namespace_name, const char* key, 
 }
 
 void ConfigManager::read_value(nvs_handle_t handle, KeyValuePair& kv) {
-    size_t required_size = 0;
+    size_t required_size;
     size_t sizeDouble = sizeof(double);
-    esp_err_t err = nvs_get_str(handle, kv.key, nullptr, &required_size);
+    esp_err_t err = nvs_get_str(handle, kv.key.c_str(), nullptr, &required_size);
     if (err == ESP_OK) {
+        //--------------------- READ STRING / BLOB -------------//
+        Serial.println("TYPE_STRING");
         kv.type = TYPE_STRING;
-        nvs_get_str(handle, kv.key, kv.value.s_val, &required_size);
-        Serial.println("String value successfully read.");
-    } else if (nvs_get_i32(handle, kv.key, &kv.value.i_val) == ESP_OK) {
+        char* buffer = (char*)malloc(required_size);
+        Serial.printf(">>>> BUFFER size: %d \n",required_size );
+        nvs_get_str(handle, kv.key.c_str(), buffer, &required_size);
+        kv.value.s_val = String(buffer);
+    } else if (nvs_get_i32(handle, kv.key.c_str(), &kv.value.i_val) == ESP_OK) {
+        //--------------------- READ INT ----------------------//
+        Serial.println("TYPE_INT");
         kv.type = TYPE_INT;
-        Serial.println("Integer value successfully read.");
-    } else if (nvs_get_blob(handle, kv.key, &kv.value.d_val, &sizeDouble) == ESP_OK) {
+    } else if (nvs_get_blob(handle, kv.key.c_str(), &kv.value.d_val, &sizeDouble) == ESP_OK) {
+        Serial.println("TYPE_DOUBLE");
+        //--------------------- READ DOUBLE -------------------//
         kv.type = TYPE_DOUBLE;
-        Serial.println("Double value successfully read.");
     } else {
-        Serial.print("Failed to read key: ");
-        Serial.println(kv.key);
-        Serial.print("Error code: ");
-        Serial.println(err);  // Protokolliert den Fehlercode
+        Serial.printf("Failed to read key ('%s') ErrorCode:", kv.key);
+        Serial.println(err);  
     }
 }
 

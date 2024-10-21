@@ -1,146 +1,184 @@
 #include <Arduino.h>
-#include "ConfigManager.h"
+#include "ConfigManager2.h"
 
-// Beispiel zur Nutzung der Klasse
 ConfigManager configManager;
+
+// Template-Funktion zur Ausgabe eines Arrays
+template <typename T>
+void printArray(const T* array, size_t size, String fmt = "%d, ") {
+    Serial.println(">>> PrintArray()");
+    for (size_t i = 0; i < size; i++) {
+        Serial.printf(fmt.c_str(), array[i]); // Standardformatierung für int
+    }
+    Serial.println(); // Neue Zeile nach der Ausgabe
+}
+
+void printKVP(KeyValuePair &kvp) {
+    switch (kvp.value.type) {
+        case TYPE_INT:
+            Serial.printf("NS: '%s', Key: '%s', ValueType: %d, Value: ",  kvp.nspace, kvp.key, kvp.value.type);
+            Serial.print(kvp.value.i_val);
+            break;
+        case TYPE_DOUBLE:
+            Serial.printf("NS: '%s', Key: '%s', ValueType: %d, Value: ",  kvp.nspace, kvp.key, kvp.value.type);
+            Serial.print(kvp.value.d_val);
+            break;
+        case TYPE_STRING:
+            Serial.printf("NS: '%s', Key: '%s', ValueType: %d, Value: ",  kvp.nspace, kvp.key, kvp.value.type);
+            Serial.print(kvp.value.s_val);
+            break;
+        case TYPE_BLOB:
+            configManager.printBlob(kvp.value);
+            break;
+    }
+}
 
 void setup() {
     Serial.begin(115200);
+    delay(100);
+    // Direkte Initialisierung für TYPE_INT
 
-    // Beispiel zum Schreiben eines neuen Wertes in einen Namespace
-    Value val1;
-    Value val1b;
-    val1.i_val = 42;
-    val1b.i_val = 4711;
-    configManager.write("example_ns", "int_key", val1, TYPE_INT);
-    Serial.printf("Write Key: '%s' mit Value : %d\n", "int_key", val1.i_val );
+    configManager.initFlash();
 
-    configManager.write("example_ns_two", "int_key", val1b, TYPE_INT);
+    Serial.println("TEST : integer value write/read");
+    KeyValuePair kvp = {
+        "integerKey",                       // key
+        "namespace1",                       // nspace
+        {  .type = TYPE_INT, .i_val = 42 },  // value (int), Type (TYPE_INT)
+    };
+    configManager.setKeyValue(kvp);
+    kvp.value.i_val = 0;
+    Serial.println("   reset kvp.value");
+    configManager.getKeyValue(kvp);
 
-    // Überschreiben der 42 mit 43
-    val1.i_val = 43;
-    Serial.printf("Überschreiben Key: '%s' mit Value : %d\n", "int_key", val1.i_val );
-    configManager.write("example_ns", "int_key", val1, TYPE_INT);
-    KeyValuePair kv;
-    strncpy( kv.value.s_val, "", sizeof( kv.value.s_val));
-    if (configManager.read_key_value("example_ns", "int_key", &kv)) {
-        Serial.print(">>> Key: '");
-        Serial.print(kv.key);
-        Serial.print("', Value: ");
-        if (kv.type == TYPE_INT) {
-            Serial.println(kv.value.i_val);
-        } else if (kv.type == TYPE_DOUBLE) {
-            Serial.println(kv.value.d_val);
-        } else if (kv.type == TYPE_STRING) {
-            Serial.println(kv.value.s_val);
-        }
-    }
-    // Protected Key
-    val1.i_val = 99;
-    Serial.printf("Protected versuche zu überschreiben Key: '%s' mit Value : %d\n", "int_key", val1.i_val );
-    configManager.write("example_ns", "int_key", val1, TYPE_INT, false);
-    kv.value.i_val = 0;
-    kv.value.d_val = 0.0;
-    strncpy( kv.value.s_val, "", sizeof( kv.value.s_val));
-    if (configManager.read_key_value("example_ns", "int_key", &kv)) {
-        Serial.print(">>> Key: '");
-        Serial.print(kv.key);
-        Serial.print("', Value: ");
-        if (kv.type == TYPE_INT) {
-            Serial.println(kv.value.i_val);
-        } else if (kv.type == TYPE_DOUBLE) {
-            Serial.println(kv.value.d_val);
-        } else if (kv.type == TYPE_STRING) {
-            Serial.println(kv.value.s_val);
-        }
-    }
-    Value val2;
-    Value val2b;
-    val2.d_val = 3.1415;
-    val2b.d_val = 11.2345;
-    configManager.write("example_ns", "double_key", val2, TYPE_DOUBLE);
-    configManager.write("example_ns_two", "double_key", val2b, TYPE_DOUBLE);
+    Serial.println("TEST : double/float value write/read");
+    kvp = {
+        "floatKey",                       // key
+        "namespace1",                       // nspace
+        { .type = TYPE_DOUBLE, .d_val = 3.1451 },  // value (int), Type (TYPE_DOUBLE)
+    };
+    configManager.setKeyValue(kvp);
+    kvp.value.d_val = 0.0;
+    Serial.println("   reset kvp.value");
+    configManager.getKeyValue(kvp);
 
-    Value val3;
-    strncpy(val3.s_val, "Hello, ESP32!", sizeof(val3.s_val));
-    configManager.write("example_ns", "string_key", val3, TYPE_STRING);
+    Serial.println("\nTEST : String value write/read");
+    Value v;
+    v.s_val = "Hello esp32 world";
+    v.type = TYPE_STRING;
+    // direkt Zuweiseung für Value ala {.s_val = "xxxxx"} funktioniert nicht
+    kvp = {
+        "stringKey",                      // key
+        "namespace1",                     // nspace
+        v                                 // value (int), Type (TYPE_STRING)
+    };
+    configManager.setKeyValue(kvp);
+    kvp.value.d_val = 0.0;
+    Serial.println("   reset kvp.value");
+    configManager.getKeyValue(kvp);
 
-    // Beispiel zum Lesen eines einzelnen Wertes
-    kv.value.i_val = 0;
-    kv.value.d_val = 0.0;
-    strncpy( kv.value.s_val, "", sizeof( kv.value.s_val));
-    if (configManager.read_key_value("example_ns", "int_key", &kv)) {
-        Serial.print("Key: ");
-        Serial.print(kv.key);
-        Serial.print(", Value: ");
-        if (kv.type == TYPE_INT) {
-            Serial.println(kv.value.i_val);
-        } else if (kv.type == TYPE_DOUBLE) {
-            Serial.println(kv.value.d_val);
-        } else if (kv.type == TYPE_STRING) {
-            Serial.println(kv.value.s_val);
-        }
-    }
+    // ------- ARRAY persistieren und lesen ---------------
+    Serial.println("\nTEST : BLOB value write/read (uint8_t array)");
+    uint8_t pidR[] = {50,5,0};
+    uint8_t result[3];
+    uint8_t* buf;
+    size_t bufLength;
+    //memset(&v, 0, sizeof(Value));
+    v.blob_val.elements = ARRAY_ELEMENTS(pidR);
+    kvp = {
+        "uint8Array", "namespace1", v
+    };
+    kvp.value = v;
+    configManager.arrayToByteArray(
+        pidR,                           // das Array was serialisiert werden soll
+        sizeof(pidR),                   // Anzahl Bytes von pidR
+        ARRAY_ELEMENTS(pidR),           // Anzahl der Elemente im pidR
+        &kvp.value.blob_val.data,       // date werden hier als blob abgelegt
+        &kvp.value.blob_val.length      // Anzahl Bytes des blobs
+    );
 
-    // Beispiel zum Lesen aller Key/Value-Paare eines Namespace
-    KeyValuePair kv_array[10];
-    size_t count = 10;
+    Serial.println(">>>> save");
+    configManager.setKeyValue(kvp);
+    kvp.value.d_val = 0.0;
+    Serial.println("   reset kvp.value");
+    configManager.getKeyValue(kvp);
+    uint8_t result8[ARRAY_ELEMENTS(pidR)];
+    configManager.byteArrayToArray(
+        kvp.value.blob_val.data, 
+        kvp.value.blob_val.length,
+        &result8
+    );
+    printArray(result8, ARRAY_ELEMENTS(result8) );
 
-    if (configManager.read_namespace("example_ns", kv_array, &count)) {
-      Serial.println("------ example_ns -------------");
-        for (size_t i = 0; i < count; i++) {
-            Serial.print("Key: ");
-            Serial.print(kv_array[i].key);
-            Serial.print(", Value: ");
-            if (kv_array[i].type == TYPE_INT) {
-                Serial.println(kv_array[i].value.i_val);
-            } else if (kv_array[i].type == TYPE_DOUBLE) {
-                Serial.println(kv_array[i].value.d_val);
-            } else if (kv_array[i].type == TYPE_STRING) {
-                Serial.println(kv_array[i].value.s_val);
-            }
-        }
-    }
+    Serial.println("\nTEST : BLOB value write/read (uint16_t array)");
+    uint16_t channels[] = {1000,1000,1000,1000,1500,1500,1500,1500};
+    uint16_t result16[ARRAY_ELEMENTS(channels)];
+    v.blob_val.elements = ARRAY_ELEMENTS(channels);
 
-    if (configManager.read_namespace("example_ns_two", kv_array, &count)) {
-      Serial.println("------ example_ns_two -------------");
-        for (size_t i = 0; i < count; i++) {
-            Serial.print("Key: ");
-            Serial.print(kv_array[i].key);
-            Serial.print(", Value: ");
-            if (kv_array[i].type == TYPE_INT) {
-                Serial.println(kv_array[i].value.i_val);
-            } else if (kv_array[i].type == TYPE_DOUBLE) {
-                Serial.println(kv_array[i].value.d_val);
-            } else if (kv_array[i].type == TYPE_STRING) {
-                Serial.println(kv_array[i].value.s_val);
-            }
-        }
-    }
+    kvp = {
+        "uint16Array", "namespace1", v
+    };
+    kvp.value = v;
+    configManager.arrayToByteArray(
+        channels,                           // das Array was serialisiert werden soll
+        sizeof(channels),                   // Anzahl Bytes von pidR
+        ARRAY_ELEMENTS(channels),           // Anzahl der Elemente im pidR
+        &kvp.value.blob_val.data,       // date werden hier als blob abgelegt
+        &kvp.value.blob_val.length      // Anzahl Bytes des blobs
+    );
 
-    char namespaces[10][16];  // Platz für bis zu 10 Namespaces mit maximal 15 Zeichen pro Namespace
-
-    // Abrufen aller Namespaces
-    int namespace_count = configManager.getAllNamespaces(namespaces, 10);
-
-    // Schleife durch alle gefundenen Namespaces und Ausgabe per Serial.printf
-    for (int i = 0; i < namespace_count; ++i) {
-        Serial.printf("Namespace found: %s\n", namespaces[i]);
-    }
-
-    // Falls keine Namespaces gefunden wurden
-    if (namespace_count == 0) {
-        Serial.println("No namespaces found.");
-    }
+    Serial.println(">>>> save");
+    configManager.setKeyValue(kvp);
+    kvp.value.d_val = 0.0;
+    Serial.println("   reset kvp.value");
+    configManager.getKeyValue(kvp);
+    configManager.byteArrayToArray(
+        kvp.value.blob_val.data, 
+        kvp.value.blob_val.length,
+        &result16
+    );
+    printArray(result16, ARRAY_ELEMENTS(result16) );
 
 
+    Serial.println("\nTEST : BLOB value write/read (double array)");
+    double doubles[] = {1.0, 1.1, 123.456, 3.1451235};
+    double resultDbl[ARRAY_ELEMENTS(doubles)];
+    v.blob_val.elements = ARRAY_ELEMENTS(doubles);
 
-    // Beispiel zum Löschen eines Namespaces
-    configManager.delete_namespace("example_ns");
-    configManager.delete_namespace("example_ns_two");
-    
+    kvp = {
+        "doubleArray", "namespace2", v
+    };
+    kvp.value = v;
+    configManager.arrayToByteArray(
+        doubles,                           // das Array was serialisiert werden soll
+        sizeof(doubles),                   // Anzahl Bytes von pidR
+        ARRAY_ELEMENTS(doubles),           // Anzahl der Elemente im pidR
+        &kvp.value.blob_val.data,       // date werden hier als blob abgelegt
+        &kvp.value.blob_val.length      // Anzahl Bytes des blobs
+    );
+
+    Serial.println(">>>> save");
+    configManager.setKeyValue(kvp);
+    kvp.value.d_val = 0.0;
+    Serial.println("   reset kvp.value");
+    configManager.getKeyValue(kvp);
+    configManager.byteArrayToArray(
+        kvp.value.blob_val.data, 
+        kvp.value.blob_val.length,
+        &resultDbl
+    );
+    printArray(resultDbl, ARRAY_ELEMENTS(resultDbl), "%07.4f, ");
+
+    Serial.println("\nTEST : getAllNamespaces()");
+    size_t max_namespaces = 10;
+    char* namespaces[max_namespaces];
+    uint8_t count = configManager.getAllNamespaces(namespaces, max_namespaces);
+    Serial.printf("MaxNamespaces found: %d \n", count);
+    printArray(namespaces, count, "%s, ");
+
+    int err = configManager.deleteAllNamespaces();
 }
 
 void loop() {
-    // nichts zu tun im Loop
+
 }

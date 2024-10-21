@@ -1,0 +1,266 @@
+#include <Arduino.h>
+#include "ConfigManager.h"
+#include "PODRacerSetup.h"
+#include "data_struct.h"
+
+
+// Beispiel zur Nutzung der Klasse
+ConfigManager configManager;
+
+void dumpData(String call, KeyValuePair kv) {
+    if (kv.type == TYPE_INT)     Serial.printf("[%s]-(%s) KEY: '%s' - read int-value    : %i\n", call.c_str(), kv.nspace, kv.key, kv.value.i_val);
+    if (kv.type == TYPE_DOUBLE)  Serial.printf("[%s]-(%s) KEY: '%s' - read double-value : %f\n", call.c_str(), kv.nspace, kv.key, kv.value.d_val);
+    if (kv.type == TYPE_STRING)  Serial.printf("[%s]-(%s) KEY: '%s' - read string-value : '%s'\n", call.c_str(), kv.nspace, kv.key, kv.value.s_val);
+}
+
+void dumpNamespace(String ns) {
+    KeyValuePair kv_array[20];    // Speicherort in dem die KeyNamen gespeichert werden.
+    size_t count = 20;
+
+    if (configManager.read_namespace(ns.c_str(), kv_array, &count)) {
+        Serial.printf("<START> --------------- %s -------------\n", ns.c_str());
+        for (size_t i = 0; i < count; i++) {
+            Serial.printf("Namespace: '%s' \tKey: '%s' \n", ns.c_str(), kv_array[i].key.c_str());
+
+            //dumpData(rcDataNS, kv_array[i]);
+        }
+        Serial.printf("< END > --------------------------------\n");
+    }    
+}
+
+
+// Methode zur Ausgabe eines Arrays
+template <typename T>
+void printArray(T* array, size_t size) {
+    for (size_t i = 0; i < size; i++) {
+        Serial.print(array[i]);
+        Serial.print(" ");
+    }
+    Serial.println(); // Neue Zeile nach der Ausgabe
+}
+
+void setup() {
+    Serial.begin(115200);
+    Value val1, val2, val3;
+    KeyValuePair kv1, kv2, kv3;
+
+    //------------------------------------------------------------------------------------
+    // Beispiel 1: 
+    //  (a) Einfaches schreiben dreier Keys in den gleichen Namespace, 1x int, 1x double, 1x string
+    //  (b) Lesen der Werte
+    //            
+    //------------------------------------------------------------------------------------
+    Serial.println("\n--- TEST 1 (read/write int/double/string )----------------------------");
+    val1.i_val = 42;
+    val2.d_val = 3.14;
+    val3.s_val = "HELLOW world";
+
+    String ns[] = {"ns1", "ns2", "RECEIVER_TASK"};
+    String keys[] = {"intKey", "doubleKey", "stringKey", "protectedKey"};
+
+    Serial.printf("Write Key: '%s' mit Value : %d\n", keys[0].c_str(), val1.i_val );
+    configManager.write(ns[0].c_str(), keys[0].c_str(), val1, TYPE_INT);
+
+    Serial.printf("Write Key: '%s' mit Value : %f\n", keys[1].c_str(), val2.d_val );
+    configManager.write(ns[0].c_str(), keys[1].c_str(), val2, TYPE_DOUBLE);
+
+    Serial.printf("Write Key: '%s' mit Value : %s\n", keys[2].c_str(), val3.s_val );
+    configManager.write(ns[0].c_str(), keys[2].c_str(), val3, TYPE_STRING);
+
+    uint8_t uint8Array[] = {2,3,5,7,11,13,17,19};
+    uint16_t uint16Array[] = {1000,1111,12345,11223, 60000, 25123,1,2};
+    double doubleArray[] = {1.234, 3.1451, 42.0, 0.015};
+
+    char *blob;
+    size_t size ;
+    size = sizeof(uint8Array) / sizeof(uint8Array[0]);
+    Serial.println("-- serialize/deserialize uint8_t array");
+    ARRAY_TO_BLOB(uint8Array, blob, size, uint8_t);
+    Serial.printf("Serialized 8-Byte Array: '%s' mit Value : %s\n", "a8", blob );
+    uint8_t byteArrayDeserialized[8];
+    BLOB_TO_ARRAY(blob, byteArrayDeserialized, size, uint8_t);
+    Serial.print("Deserialized Array: ");
+    printArray(byteArrayDeserialized, size);
+    val3.s_val = blob;
+    configManager.write(ns[0].c_str(), "a8", val3, TYPE_STRING);
+
+    Serial.println("-- serialize/deserialize uint16_t array");
+    size = sizeof(uint16Array) / sizeof(uint16Array[0]);
+    ARRAY_TO_BLOB(uint16Array, blob, size, uint16_t);
+    printArray(uint16Array, size);
+    Serial.printf("Serialized 16-Byte Array: '%s' mit Value : %s\n", "a16", blob );
+    uint16_t a16[8];
+    BLOB_TO_ARRAY(blob, a16, size, uint16_t);
+    Serial.print("Deserialized Array: ");
+    printArray(a16, size);
+    val3.s_val = blob;
+    configManager.write(ns[0].c_str(), "a16", val3, TYPE_STRING);
+
+    Serial.println("-- serialize/deserialize double array");
+    size = sizeof(doubleArray) / sizeof(doubleArray[0]);
+    ARRAY_TO_BLOB(doubleArray, blob, size, double);
+    printArray(doubleArray, size);
+    Serial.printf("Serialized double-Byte Array: '%s' mit Value : %s\n", "aDouble", blob );
+    double aDouble[8];
+    BLOB_TO_ARRAY(blob, aDouble, size, double);
+    Serial.print("Deserialized Array: ");
+    printArray(aDouble, size);
+    val3.s_val = blob;
+    configManager.write(ns[0].c_str(), "aDouble", val3, TYPE_STRING);
+
+    // read_key_value gibt false zurück, wenn der namespace ungültig ist
+    // genutzt wird immer der die gleiche Rückgabevariable
+    if (configManager.read_key_value(ns[0].c_str(), keys[0].c_str(), &kv1)) dumpData("K1", kv1);
+    if (configManager.read_key_value(ns[0].c_str(), keys[1].c_str(), &kv1)) dumpData("K2", kv1);
+    if (configManager.read_key_value(ns[0].c_str(), keys[2].c_str(), &kv1)) dumpData("K3", kv1);
+
+    //------------------------------------------------------------------------------------
+    // Beispiel 1b: 
+    //  (b) Lesen der beiden Werte allerdings ungültiger Namespace
+    //            
+    //------------------------------------------------------------------------------------
+    // der configManager gibt eine Fehlermeldungs, weil wir versuchen ns2 zu lesen
+    Serial.println("\n-- TEST 1b -------------------------------------------");
+    Serial.println("-- key wird im falschen namespace versucht zu lesen");
+    Serial.println("-- Erwartetet Fehler: 'Failed to read key (). ErrorCode: 4354'\n\n");
+    configManager.read_key_value(ns[1].c_str(), keys[0].c_str(), &kv1);
+
+    //------------------------------------------------------------------------------------
+    // Beispiel 1c: 
+    //  (b) Lesen der beiden Werte allerdings ungültiger Namespace
+    //            
+    //------------------------------------------------------------------------------------
+    Serial.println("\n--- TEST 1c (unknown key) ----------------------------");
+    Serial.println("-- ungültiger Key im namespace lesen.");
+    Serial.println("-- Erwartetet Fehler: 'Failed to read key (). ErrorCode: 4354'\n\n");
+    configManager.read_key_value(ns[1].c_str(), "unknownKey", &kv1);
+
+    //------------------------------------------------------------------------------------
+    // Beispiel 2: 
+    //------------------------------------------------------------------------------------
+    Serial.println("\n--- TEST 2 (Bestehenden Key nicht überschreiben (protected mode))");
+
+    val1.i_val = 1500;
+    Serial.printf("Protected Key/Value '%s' Value: %i\n", keys[3].c_str(), val1.i_val);
+    configManager.write(ns[1].c_str(), keys[3].c_str(), val1, TYPE_INT);
+    if (configManager.read_key_value(ns[1].c_str(), keys[3].c_str(), &kv1)) dumpData("WRITE-PROTECT", kv1);
+
+    val1.i_val = 99;
+    Serial.printf("Write Key: '%s' mit Value : %d \n", keys[3].c_str(), val1.i_val);
+    configManager.write(ns[1].c_str(), keys[3].c_str(), val1, TYPE_INT, false);
+    if (configManager.read_key_value(ns[1].c_str(), keys[3].c_str(), &kv1)) dumpData("READ-PROTECTED", kv1);
+
+
+    //------------------------------------------------------------------------------------
+    // Beispiel Namespaces Keys lesen
+    //          kann genutzt werden um einen unbekannten Namespace auszulesen und zu 
+    //          schauen, welche keys sind verfügbar.
+    //------------------------------------------------------------------------------------
+    Serial.println("\n--- TEST 3 (alle keys eines Namespaces schreiben und auslesen)");
+
+    // Nachfolgend werden Preferences geschrieben und die Keys automatisch ermittelt
+    // Die zu schreibenden Daten werden aus einer STRUCT gelesen. Structs sind einer 
+    // bevorzugte Methode Daten spezifisch als ein Objekt zu 
+    // das heißt wärend des Schreibens ist der key noch nicht bekannt
+    // anschließend lesen wir die Preferences wieder aus uns sehen welche keys erzeugt wurden
+    //
+
+    //---------------------------------------------------------------------------------------------------------------------
+    // WICHTIG : Variablen dürfen nicht länger als 15Zeichen sein, da ein Key in den Preferences nur 15Bytes lang sein darf
+    //---------------------------------------------------------------------------------------------------------------------
+
+    TDataRC rcData;
+    rcData.channels[0]  = 1000;
+    rcData.channels[1]  = 1200;
+    rcData.channels[2]  = 1400;
+    rcData.channels[3]  = 1600;
+    rcData.gimbal_mid = 1500;
+    rcData.gimbal_max = 2000;
+    rcData.gimbal_min = 1000;
+
+  
+    Value value;
+    value.i_val = rcData.gimbal_min; 
+    // TO_STRING ist ein Trick um einen Variablennamen in einen STRING umzuwandeln.
+    // den nutzen wir als Key für die Preferences
+
+    const char *key = EXTRACT_FIELD_NAME(rcDataNS.gimbal_min);
+    Serial.printf("Write this key: '%s'. ", key );
+    configManager.write(ns[2].c_str(), key, value, TYPE_INT);
+    
+    value.i_val = rcData.gimbal_max; 
+
+    Serial.printf("Write this key: '%s'. ",EXTRACT_FIELD_NAME(rcDataNS.gimbal_max) );
+    configManager.write(ns[2].c_str(), EXTRACT_FIELD_NAME(rcDataNS.gimbal_max),value, TYPE_INT);
+    
+    value.i_val = rcData.gimbal_mid; 
+    Serial.printf("Write this key: '%s'. ",EXTRACT_FIELD_NAME(rcDataNS.gimbal_center) );
+    configManager.write(ns[2].c_str(), EXTRACT_FIELD_NAME(rcDataNS.gimbal_center), value, TYPE_INT);
+    
+    size = sizeof(rcData.channels) / sizeof(rcData.channels[0]);
+    ARRAY_TO_BLOB(rcData.channels, blob, size, uint16_t);
+    value.s_val = blob;
+    Serial.printf("Write this key: '%s'. ",EXTRACT_FIELD_NAME(rcDataNS.channels) );
+    Serial.printf("    Value: %s \n", value.s_val.c_str());
+    configManager.write(ns[2].c_str(), EXTRACT_FIELD_NAME(rcDataNS.channels),value, TYPE_BLOB);
+
+    // nun wollen wir diesen neuen Namespace auslesen und
+    // schauen welche Keys generiert wurden
+    Serial.println("\ndumpNamespace.......");
+    dumpNamespace(ns[2]);
+
+    //---------------------------------------------------------------------------------------------------------------------
+    // komplettes löschen eines Namespaces
+    //---------------------------------------------------------------------------------------------------------------------
+    configManager.delete_namespace(ns[0].c_str());
+    configManager.delete_namespace(ns[1].c_str());
+    configManager.delete_namespace(ns[2].c_str());
+
+    //---------------------------------------------------------------------------------------------------------------------
+    // Beispiel um komplexe Strukturen in Preferences zu Laden
+    //      Idee: PODRacer speichert alle seine Default-Werte die später auch editiert werden könne in den Preferences
+    //              und können auch wieder geladen werden. Die Klasse PODRacerSetup stellt entsprechende Methoden zur
+    //              verfügung
+    //---------------------------------------------------------------------------------------------------------------------
+    PODRacerSetup   setup(&configManager);
+
+    String nSpace[] = {"RECEIVER_TASK", "OFLOW_TASK", "SDIST_TASK"};
+
+    // in den Structs sind die Default-Werte vorhanden. dieise übergen wird der PODRacerKlasse
+    // sie wird dieses Struct in den Preferences speichern. als KeyValue Paar.
+    // der KeyName wird aus dem Element(Attribut) der Struct generiert, der Datentyp kann so nicht ermittelt werden und
+    // wird innerhalb der setDefaultValues() definiert
+    TDataRC rcDefaultData;     // besitzt jetzt Default-Werte
+    TDataOFlow rcDefaultOFlow;
+    TDataSurface rcDefaultSDist;
+
+    Serial.println();
+    Serial.println("--------------------------------------------------------------");
+    Serial.println("--- PODRacere DefaultValues in Preferences speichern/lesen ---");
+    Serial.println("--------------------------------------------------------------");
+
+    Serial.printf("speichere defaults für '%s'\n", nSpace[0]);
+    setup.setDefaultValues(nSpace[0].c_str(), &rcDefaultData);
+    dumpNamespace(nSpace[0]);
+    Serial.println("--------------------------------------------------------------");
+
+    Serial.printf("speichere defaults für '%s'\n", nSpace[1]);
+    setup.setDefaultValues(nSpace[1].c_str(), &rcDefaultOFlow);
+    dumpNamespace(nSpace[1]);
+    Serial.println("--------------------------------------------------------------");
+
+    Serial.printf("speichere defaults für '%s'\n", nSpace[2]);
+    setup.setDefaultValues(nSpace[2].c_str(), &rcDefaultSDist);
+    dumpNamespace(nSpace[2]);
+    Serial.println("--------------------------------------------------------------");
+
+    Serial.println("Alle Namespaces wieder entfernen.....");
+    configManager.delete_namespace(nSpace[0].c_str());
+    configManager.delete_namespace(nSpace[1].c_str());
+    configManager.delete_namespace(nSpace[2].c_str());
+
+}
+
+void loop() {
+    // nichts zu tun im Loop
+}
